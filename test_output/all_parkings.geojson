@@ -1,0 +1,10 @@
+{
+  "type": "FeatureCollection",
+  "properties": {
+    "total_parkings": 1,
+    "total_vehicles": 0,
+    "generated_at": "2026-01-20T18:54:04.324623+00:00",
+    "crs": "EPSG:4326"
+  },
+  "features": []
+}

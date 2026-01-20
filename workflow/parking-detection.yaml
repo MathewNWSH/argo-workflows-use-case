@@ -1,0 +1,180 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: parking-detection-
+  namespace: argo
+  labels:
+    app: parking-detection
+spec:
+  entrypoint: main
+  arguments:
+    parameters:
+    - name: parkings
+      value: |
+        [{"name": "zlote_tarasy", "bbox": [20.996, 52.229, 21.001, 52.232]}]
+    - name: zoom
+      value: "16"
+  volumeClaimTemplates:
+  - metadata:
+      name: workdir
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 5Gi
+  templates:
+  - name: main
+    dag:
+      tasks:
+      - name: process-parking
+        template: parking-pipeline
+        arguments:
+          parameters:
+          - name: parking
+            value: "{{item}}"
+          - name: zoom
+            value: "{{workflow.parameters.zoom}}"
+        withParam: "{{workflow.parameters.parkings}}"
+      - name: aggregate-results
+        template: aggregator
+        dependencies: [process-parking]
+
+  - name: parking-pipeline
+    inputs:
+      parameters:
+      - name: parking
+      - name: zoom
+    dag:
+      tasks:
+      - name: fetch-wmts
+        template: wmts-fetcher
+        arguments:
+          parameters:
+          - name: parking
+            value: "{{inputs.parameters.parking}}"
+          - name: zoom
+            value: "{{inputs.parameters.zoom}}"
+      - name: detect-vehicles
+        template: yolo-inference
+        dependencies: [fetch-wmts]
+        arguments:
+          parameters:
+          - name: parking-name
+            value: "{{=jsonpath(inputs.parameters.parking, '$.name')}}"
+      - name: convert-geo
+        template: geo-converter
+        dependencies: [detect-vehicles]
+        arguments:
+          parameters:
+          - name: parking-name
+            value: "{{=jsonpath(inputs.parameters.parking, '$.name')}}"
+
+  - name: wmts-fetcher
+    inputs:
+      parameters:
+      - name: parking
+      - name: zoom
+    container:
+      image: parking-detection/wmts-fetcher:latest
+      env:
+      - name: PARKING_JSON
+        value: "{{inputs.parameters.parking}}"
+      - name: ZOOM
+        value: "{{inputs.parameters.zoom}}"
+      - name: OUTPUT_DIR
+        value: /data/output
+      volumeMounts:
+      - name: workdir
+        mountPath: /data
+      resources:
+        requests:
+          memory: "256Mi"
+          cpu: "100m"
+        limits:
+          memory: "1Gi"
+          cpu: "500m"
+
+  - name: yolo-inference
+    inputs:
+      parameters:
+      - name: parking-name
+    container:
+      image: parking-detection/yolo-inference:latest
+      env:
+      - name: IMAGE_PATH
+        value: /data/output/{{inputs.parameters.parking-name}}.jpg
+      - name: MODEL_PATH
+        value: /model/yolo26n.pt
+      - name: PARKING_NAME
+        value: "{{inputs.parameters.parking-name}}"
+      - name: OUTPUT_DIR
+        value: /data/output
+      volumeMounts:
+      - name: workdir
+        mountPath: /data
+      - name: model
+        mountPath: /model
+      resources:
+        requests:
+          memory: "512Mi"
+          cpu: "500m"
+        limits:
+          memory: "2Gi"
+          cpu: "2000m"
+    volumes:
+    - name: model
+      configMap:
+        name: yolo-model
+
+  - name: geo-converter
+    inputs:
+      parameters:
+      - name: parking-name
+    container:
+      image: parking-detection/geo-converter:latest
+      env:
+      - name: DETECTIONS_PATH
+        value: /data/output/{{inputs.parameters.parking-name}}_detections.json
+      - name: META_PATH
+        value: /data/output/{{inputs.parameters.parking-name}}_meta.json
+      - name: OUTPUT_DIR
+        value: /data/output
+      volumeMounts:
+      - name: workdir
+        mountPath: /data
+      resources:
+        requests:
+          memory: "128Mi"
+          cpu: "50m"
+        limits:
+          memory: "256Mi"
+          cpu: "200m"
+
+  - name: aggregator
+    container:
+      image: parking-detection/aggregator:latest
+      env:
+      - name: INPUT_DIR
+        value: /data/output
+      - name: OUTPUT_DIR
+        value: /data/final
+      volumeMounts:
+      - name: workdir
+        mountPath: /data
+      resources:
+        requests:
+          memory: "128Mi"
+          cpu: "50m"
+        limits:
+          memory: "512Mi"
+          cpu: "200m"
+    outputs:
+      artifacts:
+      - name: all-parkings-geojson
+        path: /data/final/all_parkings.geojson
+        archive:
+          none: {}
+      - name: stats-csv
+        path: /data/final/stats.csv
+        archive:
+          none: {}
