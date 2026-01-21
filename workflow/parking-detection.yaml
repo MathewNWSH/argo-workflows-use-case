@@ -112,8 +112,6 @@ spec:
       volumeMounts:
       - name: workdir
         mountPath: /data
-      - name: model
-        mountPath: /model
       resources:
         requests:
           memory: "512Mi"
@@ -121,10 +119,6 @@ spec:
         limits:
           memory: "2Gi"
           cpu: "2000m"
-    volumes:
-    - name: model
-      configMap:
-        name: yolo-model
 
   - name: geo-converter
     inputs:
