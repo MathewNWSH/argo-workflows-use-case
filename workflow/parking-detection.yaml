@@ -11,7 +11,7 @@ spec:
     parameters:
     - name: parkings
       value: |
-        [{"name": "zlote_tarasy", "bbox": [2332788, 6839000, 2333500, 6839600]}]
+        [{"name":"test","bbox":[2345990.3,6844431.7,2346242.1,6844603.1]}]
     - name: zoom
       value: "19"
   volumeClaimTemplates:
