@@ -166,7 +166,29 @@ spec:
         path: /data/final/all_parkings.geojson
         archive:
           none: {}
+        s3:
+          endpoint: s3.waw3-2.cloudferro.com
+          bucket: outputing
+          region: default
+          key: parkings/{{workflow.name}}/all_parkings.geojson
+          accessKeySecret:
+            name: cloudferro-s3-credentials
+            key: accessKey
+          secretKeySecret:
+            name: cloudferro-s3-credentials
+            key: secretKey
       - name: stats-csv
         path: /data/final/stats.csv
         archive:
           none: {}
+        s3:
+          endpoint: s3.waw3-2.cloudferro.com
+          bucket: outputing
+          region: default
+          key: parkings/{{workflow.name}}/stats.csv
+          accessKeySecret:
+            name: cloudferro-s3-credentials
+            key: accessKey
+          secretKeySecret:
+            name: cloudferro-s3-credentials
+            key: secretKey
