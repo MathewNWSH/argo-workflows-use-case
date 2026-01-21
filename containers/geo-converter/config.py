@@ -1,22 +1,20 @@
 """Configuration for Geo Converter."""
 
 import logging.config
-import os
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from pydantic_settings import BaseSettings
 from rich.console import Console
 
 
-@dataclass
-class Settings:
+class Settings(BaseSettings):
     """Settings for geo converter."""
-    
-    detections_path: Path = field(default_factory=lambda: Path(os.getenv("DETECTIONS_PATH", "/data/input/detections.json")))
-    meta_path: Path = field(default_factory=lambda: Path(os.getenv("META_PATH", "/data/input/meta.json")))
-    output_dir: Path = field(default_factory=lambda: Path(os.getenv("OUTPUT_DIR", "/data/output")))
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = os.getenv("LOG_LEVEL", "INFO")
+
+    detections_path: Path = Path("/data/input/detections.json")
+    meta_path: Path = Path("/data/input/meta.json")
+    output_dir: Path = Path("/data/output")
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
 
 def configure_logging(log_level: str = "INFO") -> None:

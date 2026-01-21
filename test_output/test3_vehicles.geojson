@@ -1,9 +1,0 @@
-{
-  "type": "FeatureCollection",
-  "properties": {
-    "parking": "test3",
-    "total_vehicles": 0,
-    "crs": "EPSG:4326"
-  },
-  "features": []
-}
