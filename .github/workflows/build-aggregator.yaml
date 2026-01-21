@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - 'containers/aggregator/**'
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io

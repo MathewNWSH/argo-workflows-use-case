@@ -11,23 +11,25 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 
-def pixel_bbox_to_lonlat_polygon(bbox_pixel: list[float], image_size: list[int], bbox: list[float]) -> list[list[list[float]]]:
-    """Convert pixel bbox [x1, y1, x2, y2] to GeoJSON Polygon coordinates."""
-    x1, y1, x2, y2 = bbox_pixel
+def pixel_polygon_to_lonlat_polygon(polygon_pixel: list[list[float]], image_size: list[int], bbox: list[float]) -> list[list[list[float]]]:
+    """Convert OBB pixel polygon [[x1,y1], [x2,y2], [x3,y3], [x4,y4]] to GeoJSON Polygon coordinates."""
     width, height = image_size
     min_lon, min_lat, max_lon, max_lat = bbox
-    
+
     lon_scale = (max_lon - min_lon) / width
     lat_scale = (max_lat - min_lat) / height
-    
-    # Convert corners (y is inverted: pixel 0 = max_lat)
-    lon1 = round(min_lon + x1 * lon_scale, 7)
-    lon2 = round(min_lon + x2 * lon_scale, 7)
-    lat1 = round(max_lat - y2 * lat_scale, 7)  # bottom
-    lat2 = round(max_lat - y1 * lat_scale, 7)  # top
-    
-    # GeoJSON Polygon: exterior ring, counter-clockwise
-    return [[[lon1, lat1], [lon2, lat1], [lon2, lat2], [lon1, lat2], [lon1, lat1]]]
+
+    # Convert each corner point (y is inverted: pixel 0 = max_lat)
+    coords = []
+    for px, py in polygon_pixel:
+        lon = round(min_lon + px * lon_scale, 7)
+        lat = round(max_lat - py * lat_scale, 7)
+        coords.append([lon, lat])
+
+    # Close the polygon ring
+    coords.append(coords[0])
+
+    return [coords]
 
 
 def convert_detections_to_geojson() -> dict:
@@ -46,7 +48,7 @@ def convert_detections_to_geojson() -> dict:
     
     features = []
     for det in detections_data["detections"]:
-        polygon_coords = pixel_bbox_to_lonlat_polygon(det["bbox_pixel"], image_size, bbox)
+        polygon_coords = pixel_polygon_to_lonlat_polygon(det["polygon_pixel"], image_size, bbox)
         features.append({
             "type": "Feature",
             "properties": {

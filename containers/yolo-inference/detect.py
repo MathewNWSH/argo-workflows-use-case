@@ -23,24 +23,30 @@ def detect_vehicles() -> dict:
     detections = []
     
     for result in results:
-        boxes = result.boxes
-        
-        for i in range(len(boxes)):
-            class_id = int(boxes.cls[i].item())
-            
+        obb = result.obb
+
+        if obb is None:
+            continue
+
+        for i in range(len(obb)):
+            class_id = int(obb.cls[i].item())
+
             if class_id not in settings.vehicle_classes:
                 continue
-            
-            confidence = float(boxes.conf[i].item())
-            bbox = boxes.xyxy[i].tolist()
-            center_x = (bbox[0] + bbox[2]) / 2
-            center_y = (bbox[1] + bbox[3]) / 2
-            
+
+            confidence = float(obb.conf[i].item())
+            # OBB returns 4 corner points: [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+            polygon = obb.xyxyxyxy[i].tolist()
+
+            # Calculate center as average of 4 corners
+            center_x = sum(p[0] for p in polygon) / 4
+            center_y = sum(p[1] for p in polygon) / 4
+
             detections.append({
                 "class_name": settings.vehicle_classes[class_id],
                 "class_id": class_id,
                 "confidence": round(confidence, 4),
-                "bbox_pixel": [round(v, 2) for v in bbox],
+                "polygon_pixel": [[round(p[0], 2), round(p[1], 2)] for p in polygon],
                 "center_pixel": [round(center_x, 2), round(center_y, 2)],
             })
     

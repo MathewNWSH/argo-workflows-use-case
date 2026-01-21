@@ -9,9 +9,8 @@ from rich.console import Console
 
 
 VEHICLE_CLASSES: dict[int, str] = {
-    2: "car",
-    5: "bus",
-    7: "truck",
+    4: "small-vehicle",
+    5: "large-vehicle",
 }
 
 

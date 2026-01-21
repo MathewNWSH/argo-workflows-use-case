@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - 'containers/wmts-fetcher/**'
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
