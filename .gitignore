@@ -15,6 +15,3 @@ wheels/
 
 # Output data
 output/
-
-# YOLO models (too large for git)
-*.pt

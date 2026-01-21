@@ -4,7 +4,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 WORKDIR /app
 COPY config.py detect.py /app/
 COPY yolo26m-obb.pt /model/yolo26m-obb.pt
-RUN uv venv /app/.venv && . /app/.venv/bin/activate && uv pip install ultralytics pillow numpy orjson rich
+RUN uv venv /app/.venv && . /app/.venv/bin/activate && uv pip install ultralytics pillow numpy orjson rich pydantic-settings
 ENV PATH="/app/.venv/bin:$PATH"
 ENV MODEL_PATH="/model/yolo26m-obb.pt"
 ENTRYPOINT ["python", "detect.py"]
