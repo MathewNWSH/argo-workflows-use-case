@@ -26,7 +26,7 @@ Input (parkings JSON)
             ▼
 ┌─────────────────────────┐
 │    YOLO Inference       │ → detections.json
-│    (yolo26n.pt)         │
+│    (yolo26m-obb.pt)         │
 └───────────┬─────────────┘
             ▼
 ┌─────────────────────────┐
@@ -84,7 +84,7 @@ workflow/
 | Zmienna | Opis | Domyślnie |
 |---------|------|-----------|
 | `IMAGE_PATH` | Ścieżka do obrazu | `/data/input/image.jpg` |
-| `MODEL_PATH` | Ścieżka do modelu | `/model/yolo26n.pt` |
+| `MODEL_PATH` | Ścieżka do modelu | `/model/yolo26m-obb.pt` |
 | `PARKING_NAME` | Nazwa parkingu | `` |
 | `OUTPUT_DIR` | Katalog wyjściowy | `/data/output` |
 | `CONFIDENCE` | Próg pewności | `0.25` |
@@ -111,7 +111,7 @@ OUTPUT_DIR=./output ZOOM=14 \
 python containers/wmts-fetcher/fetch_tiles.py
 
 # YOLO inference
-IMAGE_PATH=./output/test.jpg MODEL_PATH=./yolo26n.pt \
+IMAGE_PATH=./output/test.jpg MODEL_PATH=./yolo26m-obb.pt \
 PARKING_NAME=test OUTPUT_DIR=./output \
 python containers/yolo-inference/detect.py
 
@@ -138,7 +138,7 @@ docker build -t parking-detection/aggregator:latest containers/aggregator/
 
 ```bash
 # Utwórz ConfigMap z modelem
-kubectl -n argo create configmap yolo-model --from-file=yolo26n.pt
+kubectl -n argo create configmap yolo-model --from-file=yolo26m-obb.pt
 
 # Uruchom workflow
 kubectl apply -f workflow/parking-detection.yaml

@@ -9,10 +9,10 @@ from rich.console import Console
 
 
 class Settings(BaseSettings):
-    """Settings for geo converter."""
+    """Settings for geo converter - processes all detections for a parking."""
 
-    detections_path: Path = Path("/data/input/detections.json")
-    meta_path: Path = Path("/data/input/meta.json")
+    tiles_dir: Path = Path("/data/output/parking")
+    detections_dir: Path = Path("/data/output")
     output_dir: Path = Path("/data/output")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 

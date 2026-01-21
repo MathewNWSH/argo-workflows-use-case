@@ -12,3 +12,9 @@ wheels/
 # Environment files
 .env
 .env.*
+
+# Output data
+output/
+
+# YOLO models (too large for git)
+*.pt

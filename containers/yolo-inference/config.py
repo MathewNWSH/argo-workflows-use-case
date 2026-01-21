@@ -9,17 +9,16 @@ from rich.console import Console
 
 
 VEHICLE_CLASSES: dict[int, str] = {
-    4: "small-vehicle",
-    5: "large-vehicle",
+    9: "large-vehicle",
+    10: "small-vehicle",
 }
 
 
 class Settings(BaseSettings):
-    """Settings for YOLO inference."""
+    """Settings for YOLO inference - processes all tiles for a parking."""
 
-    image_path: Path = Path("/data/input/image.jpg")
-    model_path: Path = Path("/model/yolo26n.pt")
-    parking_name: str = ""
+    tiles_dir: Path = Path("/data/output/parking")
+    model_path: Path = Path("/model/yolo26m-obb.pt")
     output_dir: Path = Path("/data/output")
     confidence_threshold: float = 0.25
     save_annotated: bool = True

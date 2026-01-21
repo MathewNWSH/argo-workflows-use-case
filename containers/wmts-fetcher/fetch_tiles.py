@@ -87,46 +87,6 @@ def fetch_tile(row: int, col: int, zoom: int, client: httpx.Client) -> Image.Ima
         return None
 
 
-def merge_tiles(tiles: dict, row_range: range, col_range: range) -> Image.Image:
-    tile_size = settings.wmts.tile_size
-    merged = Image.new("RGB", (len(col_range) * tile_size, len(row_range) * tile_size))
-
-    for row_idx, row in enumerate(row_range):
-        for col_idx, col in enumerate(col_range):
-            if tile := tiles.get((row, col)):
-                merged.paste(tile, (col_idx * tile_size, row_idx * tile_size))
-
-    return merged
-
-
-def crop_to_bbox(image: Image.Image, image_bbox: list[float], target_bbox: list[float]) -> tuple[Image.Image, list[float]]:
-    img_min_x, img_min_y, img_max_x, img_max_y = image_bbox
-    tgt_min_x, tgt_min_y, tgt_max_x, tgt_max_y = target_bbox
-
-    img_width, img_height = image.size
-    x_per_pixel = (img_max_x - img_min_x) / img_width
-    y_per_pixel = (img_max_y - img_min_y) / img_height
-
-    left = max(0, int((tgt_min_x - img_min_x) / x_per_pixel))
-    right = min(img_width, int((tgt_max_x - img_min_x) / x_per_pixel))
-    top = max(0, int((img_max_y - tgt_max_y) / y_per_pixel))
-    bottom = min(img_height, int((img_max_y - tgt_min_y) / y_per_pixel))
-
-    if right <= left or bottom <= top:
-        logger.warning("Invalid crop region, returning original image")
-        return image, image_bbox
-
-    cropped = image.crop((left, top, right, bottom))
-    actual_bbox = [
-        img_min_x + left * x_per_pixel,
-        img_max_y - bottom * y_per_pixel,
-        img_min_x + right * x_per_pixel,
-        img_max_y - top * y_per_pixel,
-    ]
-
-    return cropped, actual_bbox
-
-
 def select_zoom_level(bbox: list[float]) -> int:
     """Select zoom level that provides at least min_pixels for the bbox."""
     min_x, min_y, max_x, max_y = bbox
@@ -145,67 +105,96 @@ def select_zoom_level(bbox: list[float]) -> int:
     return 19
 
 
-def fetch_orthophoto() -> dict:
-    settings.output_dir.mkdir(parents=True, exist_ok=True)
+def fetch_orthophoto_tiles() -> dict:
+    """Fetch tiles individually without merging - for per-tile YOLO inference."""
+    parking_dir = settings.output_dir / settings.parking_name
+    parking_dir.mkdir(parents=True, exist_ok=True)
 
     zoom = settings.zoom if settings.zoom else select_zoom_level(settings.bbox)
 
-    logger.info(f"Fetching orthophoto for [bold]{settings.parking_name}[/] at zoom {zoom}")
+    logger.info(f"Fetching tiles for [bold]{settings.parking_name}[/] at zoom {zoom}")
     logger.debug(f"BBOX (EPSG:3857): {settings.bbox}")
 
     row_range, col_range = bbox_to_tiles(settings.bbox, zoom)
+    total_tiles = len(row_range) * len(col_range)
     logger.info(f"Tiles: rows {row_range.start}-{row_range.stop-1}, cols {col_range.start}-{col_range.stop-1}")
-    logger.info(f"Total tiles: {len(row_range) * len(col_range)}")
+    logger.info(f"Total tiles to fetch: {total_tiles}")
 
-    tiles = {}
+    tiles_list = []
+    fetched_count = 0
+
     with httpx.Client() as client:
-        for row in row_range:
-            for col in col_range:
-                logger.debug(f"Fetching tile ({row}, {col})")
-                if tile := fetch_tile(row, col, zoom, client):
-                    tiles[(row, col)] = tile
-                else:
-                    logger.warning(f"Failed to fetch tile ({row}, {col})")
+        for row_idx, row in enumerate(row_range):
+            for col_idx, col in enumerate(col_range):
+                tile_id = f"{row_idx}_{col_idx}"
+                logger.debug(f"Fetching tile ({row}, {col}) -> {tile_id}")
 
-    if not tiles:
+                tile_img = fetch_tile(row, col, zoom, client)
+                if tile_img is None:
+                    logger.warning(f"Failed to fetch tile ({row}, {col}), skipping")
+                    continue
+
+                # Save tile image
+                tile_image_path = parking_dir / f"tile_{tile_id}.jpg"
+                tile_img.save(tile_image_path, "JPEG", quality=95)
+
+                # Get tile bbox
+                tile_bbox = get_tile_bbox(row, col, zoom)
+
+                # Save tile metadata
+                tile_meta = {
+                    "parking": settings.parking_name,
+                    "tile_id": tile_id,
+                    "tile_row": row,
+                    "tile_col": col,
+                    "bbox": tile_bbox,
+                    "image_size": [tile_img.width, tile_img.height],
+                    "crs": "EPSG:3857",
+                    "zoom_level": zoom,
+                }
+
+                tile_meta_path = parking_dir / f"tile_{tile_id}_meta.json"
+                with open(tile_meta_path, "wb") as f:
+                    f.write(orjson.dumps(tile_meta, option=orjson.OPT_INDENT_2))
+
+                # Add to tiles list for Argo fanout
+                tiles_list.append({
+                    "tile_id": tile_id,
+                    "parking": settings.parking_name,
+                    "image_path": str(tile_image_path.relative_to(settings.output_dir.parent)),
+                    "meta_path": str(tile_meta_path.relative_to(settings.output_dir.parent)),
+                })
+
+                fetched_count += 1
+
+    if not tiles_list:
         raise RuntimeError("No tiles were fetched successfully")
 
-    logger.info("Merging tiles...")
-    merged = merge_tiles(tiles, row_range, col_range)
+    logger.info(f"Fetched [bold]{fetched_count}/{total_tiles}[/] tiles")
 
-    first_tile_bbox = get_tile_bbox(row_range.start, col_range.start, zoom)
-    last_tile_bbox = get_tile_bbox(row_range.stop - 1, col_range.stop - 1, zoom)
-    merged_bbox = [first_tile_bbox[0], last_tile_bbox[1], last_tile_bbox[2], first_tile_bbox[3]]
+    # Save tiles list for Argo workflow fanout
+    tiles_json_path = parking_dir / "tiles.json"
+    with open(tiles_json_path, "wb") as f:
+        f.write(orjson.dumps(tiles_list, option=orjson.OPT_INDENT_2))
+    logger.info(f"Saved tiles list: {tiles_json_path}")
 
-    logger.info("Cropping to target BBOX...")
-    cropped, actual_bbox = crop_to_bbox(merged, merged_bbox, settings.bbox)
-
-    image_path = settings.output_dir / f"{settings.parking_name}.jpg"
-    meta_path = settings.output_dir / f"{settings.parking_name}_meta.json"
-
-    cropped.save(image_path, "JPEG", quality=95)
-    logger.info(f"Saved image: {image_path} ({cropped.size[0]}x{cropped.size[1]} px)")
-
-    metadata = {
-        "name": settings.parking_name,
-        "bbox": actual_bbox,
-        "image_size": list(cropped.size),
-        "crs": "EPSG:3857",
+    # Return summary metadata
+    summary = {
+        "parking": settings.parking_name,
+        "total_tiles": fetched_count,
         "zoom_level": zoom,
+        "bbox": settings.bbox,
+        "tiles_json": str(tiles_json_path),
+        "tiles": tiles_list,
     }
 
-    with open(meta_path, "wb") as f:
-        f.write(orjson.dumps(metadata, option=orjson.OPT_INDENT_2))
-    logger.info(f"Saved metadata: {meta_path}")
-
-    return metadata
+    return summary
 
 
 def main():
     try:
-        metadata = fetch_orthophoto()
-        logger.info("[bold green]Success![/]")
-        logger.debug(orjson.dumps(metadata, option=orjson.OPT_INDENT_2).decode())
+        result = fetch_orthophoto_tiles()
+        logger.info(f"[bold green]Success![/] Fetched {result['total_tiles']} tiles")
     except Exception as e:
         logger.error(f"Error: {e}")
         sys.exit(1)
